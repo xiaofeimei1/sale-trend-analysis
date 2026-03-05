@@ -1,0 +1,16 @@
+---
+title: "P2data607"
+author: "xiaofei"
+format: html
+editor: visual
+---
+
+## Approach
+
+The task is to find a untidy data with wide structure - large number of columns with similar category. We will transform the wide-format data sets into tidy format suitable for downstream analysis.
+
+The data set I found is a Kaggle data set cafe sales, with link. https://www.kaggle.com/datasets/ahmedmohamed2003/cafe-sales-dirty-data-for-cleaning-training. This is a good practice data set due to mixed data type in column "price per unit" with mostly float type, however there are string value such as "ERROR". Similarly in column "Transaction Date" it has different data type, date mixed with string "UNKNOWN" or missing values waiting to be clean.
+
+I will first download this practice csv file, and add more columns to it, maybe column can be order name such as: coffee A, coffee B, Cofee C, y etc. Later in the transforming part, those columns can be grouped under one single column name : coffee order.
+
+Analysis I can perform after cleaning and tidy the data, I can do a breakdown on cafe revenue, to see how payment method were distributed, or if there is any seasonal trend through transaction date.
