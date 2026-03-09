@@ -5,12 +5,389 @@ format: html
 editor: visual
 ---
 
-## Approach
+## **Introduction**
 
-The task is to find a untidy data with wide structure - large number of columns with similar category. We will transform the wide-format data sets into tidy format suitable for downstream analysis.
+The task is to choose three datasets from the week's class discussion to practice transforming wide-format datasets into tidy formats suitable for downstream analysis.
 
-The data set I found is a Kaggle data set cafe sales, with link. https://www.kaggle.com/datasets/ahmedmohamed2003/cafe-sales-dirty-data-for-cleaning-training. This is a good practice data set due to mixed data type in column "price per unit" with mostly float type, however there are string value such as "ERROR". Similarly in column "Transaction Date" it has different data type, date mixed with string "UNKNOWN" or missing values waiting to be clean.
+The three datasets I choose are: 1)world GDP by country; 2)Japanese population density; 3)a made up datsets about takeout spending habit by generation. The following process steps will be performed on each of the datasets individually:
 
-I will first download this practice csv file, and add more columns to it, maybe column can be order name such as: coffee A, coffee B, Cofee C, y etc. Later in the transforming part, those columns can be grouped under one single column name : coffee order.
+-   Create a .CSV file that includes all of the information included in the dataset.
 
-Analysis I can perform after cleaning and tidy the data, I can do a breakdown on cafe revenue, to see how payment method were distributed, or if there is any seasonal trend through transaction date.
+-   Read the information from your .CSV file into R, and use tidyr and dplyr as needed to tidy and transform your data.
+
+-   Perform the analysis requested.
+
+-   Code R Markdown file, posted to rpubs.com, and should include narrative descriptions of your data cleanup work, analysis, and conclusions.
+
+## **Dataset 1: World GDP by Country: 1960-2022**
+
+Import and load dataset. Original data has dimensions of 266 rows and 65 columns. After transformation to the long format, the new datasets has only 4 columns and 16758 rows. This long format is grouped in a way that's easier for analysis, filtering and visualization. We are ready for the next step - analysis.
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+# create df to read the CSV file from my github repository
+gdp_data <- read.csv("https://raw.githubusercontent.com/xiaofeimei1/sale-trend-analysis/refs/heads/main/GDP.csv", 
+                     stringsAsFactors = FALSE,
+                     check.names = FALSE)   
+
+print("origional columns:")
+print(names(gdp_data))
+
+print("Structure of original data:")
+str(gdp_data)
+
+# Show first few rows
+print("First few rows of original data:")
+print(head(gdp_data))
+
+# Transform from wide to long format
+gdp_long <- gdp_data |>
+  pivot_longer(
+    cols = -c(Country, `Country Code`),  
+    names_to = "Year",
+    values_to = "GDP"
+  ) |>
+  mutate(
+    Year = as.integer(Year),   
+    GDP = as.numeric(GDP)      
+  ) |>
+  arrange(Country, Year)
+
+# Show new dataset
+print("Transformed data column names:")
+print(names(gdp_long))
+
+print("Structure of transformed data:")
+str(gdp_long)
+
+print("First 20 rows of transformed dataset:")
+print(head(gdp_long, 20))
+
+print("Summary of Year column:")
+print(summary(gdp_long$Year))
+
+```
+
+Analysis and visualization. From the results shown below, The GDP dataset contains observations from 1960 to 2022. Since we GDP data listed for each year, we can do analysis on the GDP trend, such as find out which region has the top 10 growing GDP. I will also plot contry GDP but group them in regions to find out a a macro trend globally. In the end show plots to conclude analysis for this first dataset.
+
+```{r}
+
+# 1. BASIC SUMMARY STATISTICS
+print(paste("Total countries:", length(unique(gdp_long$Country))))
+print(paste("Time period:", min(gdp_long$Year, na.rm = TRUE), "to", max(gdp_long$Year, na.rm = TRUE)))
+print(paste("Total observations:", nrow(gdp_long)))
+
+# top 10 economies in the most recent year (2022)
+top_economies_2022 <- gdp_long |>
+  filter(Year == 2022 & !is.na(GDP)) |>
+  arrange(desc(GDP)) |>
+  head(10) |>
+  pull(Country)
+
+print("Top 10 economies in 2022:")
+print(top_economies_2022)
+
+# VISUALIZATIONS
+
+# Visualization 1: Top 10 Economies Growth Over Time (1960-2022)
+top_gdp_data <- gdp_long |>
+  filter(Country %in% top_economies_2022 & !is.na(GDP))
+
+ggplot(top_gdp_data, aes(x = Year, y = GDP/1e9, color = Country)) +
+  geom_line(size = 1) +
+  scale_y_log10(labels = scales::comma) +
+  labs(title = "GDP Growth of Top 10 Economies (1960-2022)",
+       subtitle = "Log scale - Values in Billions USD",
+       x = "Year", 
+       y = "GDP (Billions USD, log scale)",
+       color = "Country") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_x_continuous(breaks = seq(1960, 2020, by = 10))
+
+# Global GDP Trend
+global_trend <- gdp_long |>
+  group_by(Year)|>
+  summarise(World_GDP = sum(GDP, na.rm = TRUE) / 1e9)  # in unit billions
+
+ggplot(global_trend, aes(x = Year, y = World_GDP)) +
+  geom_line(color = "darkblue", size = 1.2) +
+  geom_point(color = "darkblue", size = 0.5) +
+  labs(title = "Global GDP Trend (1960-2022)",
+       subtitle = "Total World GDP in Billions USD",
+       x = "Year",
+       y = "World GDP (Billions USD)") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(1960, 2020, by = 5)) +
+  scale_y_continuous(labels = scales::comma)
+
+
+# Create a simple region classification and compare trend
+major_economies_list <- c("United States", "China", "Japan", "Germany", "United Kingdom","France", "India", "Brazil", "Canada", "Italy", "Russia")
+
+# Filter the data for these major economies
+major_economies <- gdp_long |>
+  filter(Country %in% major_economies_list & !is.na(GDP))
+
+# Create region classification
+major_economies <- major_economies |>
+  mutate(Region = case_when(
+    Country %in% c("United States", "Canada") ~ "North America",
+    Country %in% c("Germany", "United Kingdom", "France", "Italy") ~ "Europe",
+    Country == "China" ~ "China",
+    Country == "India" ~ "India",
+    Country == "Japan" ~ "Japan",
+    Country == "Brazil" ~ "Brazil",
+    Country == "Russia" ~ "Russia",
+    TRUE ~ "Other"
+  ))
+
+# Plot regional comparison
+ggplot(major_economies, aes(x = Year, y = GDP/1e9, color = Region, group = Country)) +
+  geom_line(size = 1) +
+  facet_wrap(~Region, scales = "free_y") +
+  labs(title = "GDP Trends by Major Economy",
+       subtitle = "Selected major economies grouped by region",
+       x = "Year",
+       y = "GDP (Billions USD)") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks = seq(1960, 2020, by = 20))
+```
+
+## **Dataset 2: Japanese 2015 Population Density**
+
+This is a dataset about Japanese population in different cities. City names were spread out in multiple columns, total 47 in the original dataset. Goal is transform dataset to long format, new column city_name will be created to group those cities in one single column, population density will be grouped under column name population_density. We will check and compare columns between original dataset with the transformed dataset in the following code chunk:
+
+```{r}
+library(tidyr)
+library(dplyr)
+
+# Read the  population density CSV file from my github repository
+population_data <- read.csv("https://raw.githubusercontent.com/xiaofeimei1/sale-trend-analysis/refs/heads/main/prefecturepopdensity2015.csv", 
+                            stringsAsFactors = FALSE,
+                            check.names = FALSE,
+                            header = TRUE)  
+
+# original column names
+print("Original columns in population dataset:")
+print(names(population_data))
+
+# structure 
+print("Structure of original population data:")
+str(population_data)
+
+# Show first few rows of original data
+print(head(population_data))
+
+# Transform from wide to long format
+population_long <- population_data |>
+  pivot_longer(
+    cols = everything(),   
+    names_to = "city_name",
+    values_to = "population_density"
+  ) |>
+  mutate(
+    population_density = as.numeric(population_density),  
+    city_name = as.character(city_name)   
+  ) |>
+  arrange(city_name)   
+
+# Show transformed dataset results
+print("Transformed data column names:")
+print(names(population_long))
+
+print("Structure of transformed data:")
+str(population_long)
+
+print("First 20 rows of transformed dataset:")
+print(head(population_long, 20))
+
+print(paste("Total rows:", nrow(population_long)))
+print(paste("Number of prefectures:", length(unique(population_long$city_name))))
+
+```
+
+After getting the long format, we are ready to do population analysis and visualization. As shown below, top cities that has most dense population are: Tokyo, Osaka, Kanagawa... On the other hand, lowest cities with population density are Hokkaido, Iwate, Akita... To show how population were largely concentrate on the top 3 cities, we can see the last visualization that those 3 cities are far more dense compare to other cities.
+
+```{r}
+
+top_dense <- population_long |>
+  arrange(desc(population_density)) |>
+  head(10)
+
+bottom_dense <- population_long |>
+  arrange(population_density) |>
+  head(10)
+
+# Bar chart of top 10 most dense prefectures
+ggplot(top_dense, aes(x = reorder(city_name, population_density), y = population_density)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Most Densely Populated Japanese Prefectures",
+       subtitle = "Population Density (persons/km²) - 2015",
+       x = "Prefecture",
+       y = "Population Density (persons/km²)") +
+  theme_minimal() +
+  geom_text(aes(label = round(population_density, 0)), hjust = -0.1, size = 3)
+
+# Bar chart of bottom 10 least dense prefectures
+ggplot(bottom_dense, aes(x = reorder(city_name, desc(population_density)), y = population_density)) +
+  geom_bar(stat = "identity", fill = "coral") +
+  coord_flip() +
+  labs(title = "Top 10 Least Densely Populated Japanese Prefectures",
+       subtitle = "Population Density (persons/km²) - 2015",
+       x = "Prefecture",
+       y = "Population Density (persons/km²)") +
+  theme_minimal() +
+  geom_text(aes(label = round(population_density, 0)), hjust = -0.1, size = 3)
+
+# Dot plot of all prefectures
+ggplot(population_long, aes(x = reorder(city_name, population_density), y = population_density)) +
+  geom_point(size = 3, color = "darkblue") +
+  coord_flip() +
+  labs(title = "Population Density of All Japanese Prefectures",
+       subtitle = "Ordered from lowest to highest density",
+       x = "Prefecture",
+       y = "Population Density (persons/km²)") +
+  theme_minimal() +
+  geom_hline(yintercept = mean(population_long$population_density), 
+             linetype = "dashed", color = "red", size = 0.5) +
+  annotate("text", x = 5, y = mean(population_long$population_density) + 100, 
+           label = "National Average", color = "red", size = 3)
+
+
+
+```
+
+## **Dataset 3:** takeout spending habit by generation.
+
+The original takeout spending dataset contained 12 rows and 7 columns, with 5 generations: Gen Z, Millennials, Gen X, Baby Boomers, Silent Gen. and their monthly spending columns from January to June. After transformation, the dataset was reshaped into long format with 30 rows and 3 columns: generation, month and spending. This transformed datasets is in tidy structure are are ready for data analysis and visualization.
+
+```{r}
+
+# Read the takeout spending CSV file
+takeout_data <- read.csv("https://raw.githubusercontent.com/xiaofeimei1/sale-trend-analysis/refs/heads/main/takeoutspending.csv", 
+                         stringsAsFactors = FALSE,
+                         check.names = FALSE)
+
+# Print original columns 
+print(names(takeout_data))
+
+# Show structure of original data
+str(takeout_data)
+
+# Show first few rows of original data
+print("First few rows of original takeout data:")
+print(head(takeout_data))
+
+# Clean the data first - remove empty rows
+takeout_data_clean <- takeout_data |>
+  filter(!is.na(generation) & generation != "") |>  # Remove rows with empty generation
+  select(1:7)  
+
+# Transform from wide to long 
+takeout_long <- takeout_data_clean |>
+  pivot_longer(
+    cols = -generation,  # All month columns except generation
+    names_to = "month",
+    values_to = "spending"
+  ) |>
+  mutate(
+    month = as.character(month),  #  month in character
+    spending = as.numeric(spending),  #  spending is numericr
+    month = factor(month, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun"), ordered = TRUE)
+  ) |>
+  arrange(generation, month)  
+# Show transformed dataset results
+print(names(takeout_long))
+
+print("Structure of transformed data:")
+str(takeout_long)
+
+print("All rows of transformed dataset:")
+print(takeout_long)
+
+
+print(paste("Total rows:", nrow(takeout_long)))
+print(paste("Number of generations:", length(unique(takeout_long$generation))))
+print(paste("Months covered:", paste(levels(takeout_long$month), collapse = ", ")))
+
+# average spending by generation
+print("Average spending by generation:")
+takeout_long |>
+  group_by(generation) |>
+  summarise(avg_spending = mean(spending, na.rm = TRUE)) %>%
+  arrange(desc(avg_spending))
+
+# average spending by month
+print("Average spending by month:")
+takeout_long |>
+  group_by(month) |>
+  summarise(avg_spending = mean(spending, na.rm = TRUE))
+```
+
+Data analysis and visualization to identify which generation spends the most on takeout per month and to find out monthly spending trends across different generational groups.
+
+The results shows that Millennials lead in takeout spending, with the highest average monthly expenditures. They are closely followed by Gen Z and Gen X, whose spending levels are very similar to each other.
+
+Regarding monthly trends, the analysis shows a upward pattern from January to June across all generations, indicating that takeout spending generally increases as the year progresses from winter to summer months. This seasonal trend, combined with generational differences, could be valuable infomation to study consumer behavior and for company to potential targeting specific generation to promote their food products.
+
+```{r}
+generation_summary <- takeout_long |>
+  group_by(generation) |>
+  summarise(
+    Avg_Monthly = mean(spending, na.rm = TRUE),
+    .groups = 'drop'
+  ) |>
+  arrange(desc(Avg_Monthly))
+
+# Bar chart - Average monthly spending by generation
+ggplot(generation_summary, aes(x = reorder(generation, Avg_Monthly), y = Avg_Monthly, fill = generation)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +
+  labs(title = "Average Monthly Takeout Spending by Generation",
+       subtitle = "Based on Jan-Jun 2015 data",
+       x = "Generation",
+       y = "Average Monthly Spending ($)") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_text(aes(label = paste0("$", round(Avg_Monthly, 0))), hjust = -0.2, size = 4) +
+  scale_fill_brewer(palette = "Set2") +
+  ylim(0, max(generation_summary$Avg_Monthly) * 1.1)
+
+# Line chart - Spending trends over months by generation
+ggplot(takeout_long, aes(x = month, y = spending, group = generation, color = generation)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  labs(title = "Takeout Spending Trends by Generation (Jan-Jun 2015)",
+       subtitle = "Monthly spending patterns across generations",
+       x = "Month",
+       y = "Spending ($)",
+       color = "Generation") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  scale_color_brewer(palette = "Set1")
+
+#Comparison across months
+ggplot(takeout_long, aes(x = month, y = spending, fill = generation)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Monthly Takeout Spending by Generation",
+       subtitle = "Side-by-side comparison",
+       x = "Month",
+       y = "Spending ($)",
+       fill = "Generation") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  scale_fill_brewer(palette = "Set2")
+
+```
+
+## **Summary**
+
+This data analysis project focused on transforming three distinct datasets (global GDP, Japanese prefecture population density, and generational takeout spending) from wide format to long format to enable more effective analysis and visualization. Wide format has data of same category across multiple columns, making comparative analysis more difficult. The transformed data made filtering easier, enhanced grouping and aggregation when doing analysis. This data transformation to get tidy data is essential part for complex data analysis.
